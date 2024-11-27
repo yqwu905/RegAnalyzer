@@ -1,0 +1,4 @@
+{
+    "name": "Reg2",
+    "template": "Reg2: {{Reg2}}, Reg3 value is {{Reg3}}"
+}   
