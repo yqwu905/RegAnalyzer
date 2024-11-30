@@ -1,5 +1,10 @@
-<script>
+<script lang="ts">
 import { ref } from 'vue';
+
+interface RegisterTemplate {
+    name: string;
+    template: string
+}
 
 export default {
     data() {
@@ -7,32 +12,26 @@ export default {
             selectedOption: '',
             inputText: '',
             displayText: '',
-            regs: [], // 将从json文件加载的寄存器数据存储在这里
-            regFiles: [], // 存储所有json文件的内容
+            regs: [] as Array<RegisterTemplate>, // 将从json文件加载的寄存器数据存储在这里
         }
     },
     async created() {
         try {
             // 使用 import.meta.glob 动态导入所有json文件
-            const jsonFiles = import.meta.glob('/src/registers/*.json');
+            const jsonFiles = import.meta.glob<{ default: RegisterTemplate }>('/src/registers/*.json');
             console.log(jsonFiles);
             // 遍历并加载所有json文件
             for (const path in jsonFiles) {
-                const module = await jsonFiles[path]();
-                this.regFiles.push(module.default);
+                const module = await jsonFiles[path]() as { default: RegisterTemplate };
+                this.regs.push(module.default);
             }
 
-            // 将加载的json数据转换为regs数组
-            this.regs = this.regFiles.map(file => ({
-                name: file.name,
-                template: file.template
-            }));
         } catch (error) {
             console.error('加载寄存器文件失败:', error);
         }
     },
     methods: {
-        parseJinjaTemplate(template) {
+        parseJinjaTemplate(template: string) {
             try {
                 // 提取模板中的变量
                 const variables = template.match(/{{(.*?)}}/g)?.map(v => v.slice(2, -2).trim());
@@ -51,14 +50,14 @@ export default {
                 }
 
                 // 构建结果对象
-                const result = {};
+                const result: { [id: string]: string } = {};
                 variables.forEach((variable, index) => {
                     result[variable] = match[index + 1];
                 });
 
                 return result;
             } catch (error) {
-                return { error: true, message: error.message, position: 0 };
+                return { error: true, message: (error as Error).message, position: 0 };
             }
         },
 
