@@ -1,9 +1,23 @@
 <script lang="ts">
+import { Tree } from 'primevue';
 import { ref } from 'vue';
-
 interface RegisterTemplate {
     name: string;
     template: string
+}
+
+interface TreeNode {
+    key?: string | number;           // 唯一标识
+    label: string;                   // 节点显示的标签
+    data?: any;                      // 节点关联的数据
+    icon?: string;                   // 节点图标
+    children?: TreeNode[];           // 子节点数组
+    selectable?: boolean;            // 是否可选
+    style?: string | object;         // 样式
+    styleClass?: string;             // 样式类
+    expanded?: boolean;              // 是否展开
+    type?: string;                   // 节点类型
+    leaf?: boolean;                  // 是否为叶子节点
 }
 
 export default {
@@ -13,6 +27,8 @@ export default {
             inputText: '',
             displayText: '',
             regs: [] as Array<RegisterTemplate>, // 将从json文件加载的寄存器数据存储在这里
+            regsList: [] as Array<string>,
+            parsedRegTree: [] as Array<TreeNode>
         }
     },
     async created() {
@@ -24,6 +40,7 @@ export default {
             for (const path in jsonFiles) {
                 const module = await jsonFiles[path]() as { default: RegisterTemplate };
                 this.regs.push(module.default);
+                this.regsList.push(module.default.name);
             }
 
         } catch (error) {
@@ -31,44 +48,50 @@ export default {
         }
     },
     methods: {
-        parseJinjaTemplate(template: string) {
-            try {
-                // 提取模板中的变量
-                const variables = template.match(/{{(.*?)}}/g)?.map(v => v.slice(2, -2).trim());
-                if (!variables) {
-                    return { error: true, message: '模板中没有变量', position: 0 };
-                }
-
-                // 将模板转换为正则表达式
-                const regexStr = template.replace(/{{.*?}}/g, '(.+?)');
-                const regex = new RegExp('^' + regexStr + '$');
-
-                // 尝试匹配输入文本
-                const match = this.inputText.match(regex);
-                if (!match) {
-                    return { error: true, message: '输入文本与模板不匹配', position: 0 };
-                }
-
-                // 构建结果对象
-                const result: { [id: string]: string } = {};
-                variables.forEach((variable, index) => {
-                    result[variable] = match[index + 1];
-                });
-
-                return result;
-            } catch (error) {
-                return { error: true, message: (error as Error).message, position: 0 };
+        parseJinjaTemplate(template: string): { [id: string]: string } | null {
+            // 提取模板中的变量
+            const variables = template.match(/{{(.*?)}}/g)?.map(v => v.slice(2, -2).trim());
+            if (!variables) {
+                this.displayText = "非法的DownInfo模板!"
+                return null
             }
+
+            // 将模板转换为正则表达式
+            const regexStr = template.replace(/{{.*?}}/g, '(.+?)');
+            const regex = new RegExp('^' + regexStr + '$');
+
+            // 尝试匹配输入文本
+            const match = this.inputText.match(regex);
+            if (!match) {
+                this.displayText = '输入文本与模板不匹配'
+                return null
+            }
+
+            // 构建结果对象
+            const result: { [id: string]: string } = {};
+            variables.forEach((variable, index) => {
+                result[variable] = match[index + 1];
+            });
+
+            return result;
         },
 
         handleClick() {
+            this.parsedRegTree = []
             const selectedReg = this.regs.find(reg => reg.name === this.selectedOption);
             if (selectedReg) {
                 const result = this.parseJinjaTemplate(selectedReg.template);
-                if (!result.error) {
+                if (result !== null) {
+                    const num: number = 0;
                     this.displayText = JSON.stringify(result, null, 2);
-                } else {
-                    this.displayText = `解析失败: ${result.message}\n在位置 ${result.position} 处匹配失败!`;
+                    for (const key in result) {
+                        const regVal = parseInt(result[key], 0)
+                        if (isNaN(regVal)) {
+                            this.displayText = `${result[key]}为非法的寄存器值!`
+                        } else {
+                            this.parsedRegTree.push({ key: num, label: `${key}: ${regVal}`, data: regVal })
+                        }
+                    }
                 }
             } else {
                 this.displayText = '请选择寄存器模板!';
@@ -81,11 +104,9 @@ export default {
 <template>
     <div class="container">
         <div class="top">
-            <select v-model="selectedOption" class="select">
-                <option value="">请选择寄存器模板</option>
-                <option v-for="reg in regs" :value="reg.name">{{ reg.name }}</option>
-            </select>
-            <button class="button" @click="handleClick">解析</button>
+            <p>DownInfo模板</p>
+            <Select v-model="selectedOption" :options='regsList' />
+            <Button @click="handleClick" label="submit" raised />
         </div>
 
         <div class="middle">
@@ -99,6 +120,7 @@ export default {
             <div class="display-area">
                 {{ displayText }}
             </div>
+            <Tree :value=parsedRegTree />
         </div>
     </div>
 </template>
