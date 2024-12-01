@@ -1,9 +1,18 @@
 <script lang="ts">
-import { Tree } from 'primevue';
 import { ref } from 'vue';
+
+interface RegisterField {
+    name: string,
+    low_bit: number,
+    high_bit: number,
+    desc: string,
+    default: number
+}
+
 interface RegisterTemplate {
     name: string;
-    template: string
+    template: string,
+    registers: { [id: string]: Array<RegisterField> }
 }
 
 interface TreeNode {
@@ -48,11 +57,18 @@ export default {
         }
     },
     methods: {
+        getBits(num: number, low_bit: number, high_bit: number): number {
+            // 创建掩码
+            const mask = ((1 << (high_bit - low_bit + 1)) - 1) << low_bit;
+            // 提取位并右移
+            return (num & mask) >> low_bit;
+        },
+
         parseJinjaTemplate(template: string): { [id: string]: string } | null {
             // 提取模板中的变量
             const variables = template.match(/{{(.*?)}}/g)?.map(v => v.slice(2, -2).trim());
             if (!variables) {
-                this.displayText = "非法的DownInfo模板!"
+                this.$toast.add({severity: 'error', summary: 'Error', detail: '非法的DownInfo模板!', life: 1000});
                 return null
             }
 
@@ -63,7 +79,7 @@ export default {
             // 尝试匹配输入文本
             const match = this.inputText.match(regex);
             if (!match) {
-                this.displayText = '输入文本与模板不匹配'
+                this.$toast.add({severity: 'error', summary: 'Error', detail: '输入文本与模板不匹配', life: 1000});
                 return null
             }
 
@@ -79,22 +95,34 @@ export default {
         handleClick() {
             this.parsedRegTree = []
             const selectedReg = this.regs.find(reg => reg.name === this.selectedOption);
+            let count = 0;
             if (selectedReg) {
                 const result = this.parseJinjaTemplate(selectedReg.template);
                 if (result !== null) {
-                    const num: number = 0;
-                    this.displayText = JSON.stringify(result, null, 2);
                     for (const key in result) {
                         const regVal = parseInt(result[key], 0)
                         if (isNaN(regVal)) {
-                            this.displayText = `${result[key]}为非法的寄存器值!`
+                            this.$toast.add({severity: 'error', summary: 'Error', detail: `${result[key]}为非法的寄存器值!`, life: 1000});
                         } else {
-                            this.parsedRegTree.push({ key: num, label: `${key}: ${regVal}`, data: regVal })
+                            count++;
+                            let child_count = 0;
+                            let fields = selectedReg.registers[key]
+                            let node: TreeNode = { key: count, label: `${key}: ${regVal}`, data: regVal, children: [] };
+                            for (const field of fields) {
+                                node.children!.push({
+                                    key: `${count}-${child_count}`,
+                                    label: `${field.name}: ${this.getBits(regVal, field.low_bit, field.high_bit)}`, 
+                                    children: [{ label: field.desc }, {label: `default value: ${field.default}`}] 
+                                })
+                                child_count++;
+                            }
+                            this.parsedRegTree.push(node)
                         }
                     }
+                    this.$toast.add({severity: 'info', summary: 'Info', detail: '解析完成!', life: 1000});
                 }
             } else {
-                this.displayText = '请选择寄存器模板!';
+                this.$toast.add({severity: 'error', summary: 'Error', detail: '请选择寄存器模板!', life: 1000});
             }
         }
     }
@@ -102,6 +130,7 @@ export default {
 </script>
 
 <template>
+    <Toast />
     <div class="container">
         <div class="top">
             <p>DownInfo模板</p>
@@ -117,9 +146,6 @@ export default {
         <div style="margin: 10px"></div>
 
         <div class="bottom">
-            <div class="display-area">
-                {{ displayText }}
-            </div>
             <Tree :value=parsedRegTree />
         </div>
     </div>
@@ -176,12 +202,5 @@ export default {
     justify-content: center;
     width: 100%;
     height: 25vh;
-}
-
-.display-area {
-    width: 33.33%;
-    min-height: 100px;
-    padding: 10px;
-    border: 1px solid #ccc;
 }
 </style>

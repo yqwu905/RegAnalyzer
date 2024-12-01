@@ -1,4 +1,0 @@
-{
-    "name": "MultiLine Register",
-    "template": "Line1 Reg1: {{Reg1}}\nLine2 Reg2: {{Reg2}}"
-}
